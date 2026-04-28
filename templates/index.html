@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RemoveBG • Princess Evelyn</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1>Remove Background</h1>
+      <p>Upload an image and get a transparent PNG using the <strong>{{ config.DEFAULT_MODEL or 'u2net' }}</strong> model.</p>
+      <p class="subtle">Max upload: {{ config.MAX_CONTENT_LENGTH // (1024 * 1024) }} MB • Up to {{ config.MAX_FILES }} files • Outputs auto-delete after a short time.</p>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert">
+          {% for message in messages %}
+            <p>{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post" enctype="multipart/form-data">
+      <label class="field">
+        <span>Model</span>
+        <select name="model">
+          {% for key, label in config.MODEL_OPTIONS.items() %}
+            <option value="{{ key }}" {% if key == config.DEFAULT_MODEL %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="dropzone" id="dropzone">
+        <p><strong>Drag & drop</strong> files here, or click to choose.</p>
+        <p class="subtle">Batch mode is enabled — files are processed one at a time.</p>
+        <input id="fileInput" type="file" name="images" accept="image/png,image/jpeg,image/webp" multiple required>
+      </div>
+
+      <div class="file-list" id="fileList" aria-live="polite"></div>
+
+      <button type="submit">Remove background</button>
+    </form>
+
+    <div class="tips">
+      <h2>Tips</h2>
+      <ul>
+        <li>Best results with clean contrast between subject and background.</li>
+        <li>If the image is huge, it will be resized to {{ config.MAX_DIM }}px max dimension.</li>
+      </ul>
+    </div>
+  </main>
+
+  <script>
+    const input = document.getElementById("fileInput");
+    const dropzone = document.getElementById("dropzone");
+    const fileList = document.getElementById("fileList");
+
+    function renderFileList(files) {
+      if (!files || files.length === 0) {
+        fileList.innerHTML = "";
+        return;
+      }
+      const items = Array.from(files).map((file) => (
+        `<li>${file.name} <span class="muted">(${Math.round(file.size / 1024)} KB)</span></li>`
+      ));
+      fileList.innerHTML = `<ul>${items.join("")}</ul>`;
+    }
+
+    input.addEventListener("change", (event) => {
+      renderFileList(event.target.files);
+    });
+
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("is-dragover");
+    });
+
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("is-dragover");
+    });
+
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("is-dragover");
+      input.files = event.dataTransfer.files;
+      renderFileList(input.files);
+    });
+  </script>
+</body>
+</html>

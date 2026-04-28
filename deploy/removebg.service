@@ -1,0 +1,14 @@
+[Unit]
+Description=Princess Evelyn RemoveBG
+After=network.target
+
+[Service]
+User=evelyn
+Group=www-data
+WorkingDirectory=/home/evelyn/removebg
+ExecStart=/usr/local/bin/gunicorn --config /home/evelyn/removebg/gunicorn.conf.py wsgi:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

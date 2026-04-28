@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Result • RemoveBG</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1>Done!</h1>
+      <p>Here is your cutout. Download the PNG or run another image.</p>
+    </header>
+
+    <div class="result">
+      <img src="{{ url_for('result_file', file_id=file_id) }}" alt="Background removed result">
+    </div>
+
+    <div class="actions">
+      <a class="button" href="{{ url_for('download_file', file_id=file_id) }}">Download PNG</a>
+      <a class="button ghost" href="{{ url_for('index') }}">Process another</a>
+    </div>
+  </main>
+</body>
+</html>

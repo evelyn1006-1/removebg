@@ -1,6 +1,6 @@
 server {
     server_name removebg.princessevelyn.com;
-    client_max_body_size 10m;
+    client_max_body_size 30m;
 
     # Security headers
     add_header X-Content-Type-Options "nosniff" always;

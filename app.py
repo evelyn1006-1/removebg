@@ -1,6 +1,10 @@
 import io
+import gc
+import hashlib
+import hmac
 import os
 import time
+import unicodedata
 import uuid
 from pathlib import Path
 from threading import Lock
@@ -21,9 +25,10 @@ from rembg import new_session, remove
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
-FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-me")
 ALLOWED_HOSTS = {
     h.strip().lower()
     for h in os.getenv(
@@ -34,10 +39,15 @@ ALLOWED_HOSTS = {
 }
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "u2net")
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
-MAX_DIM = int(os.getenv("MAX_DIM", "2560"))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+MAX_DIM = int(os.getenv("MAX_DIM", "3840"))
 OUTPUT_TTL_SECONDS = int(os.getenv("OUTPUT_TTL_SECONDS", "900"))
 MAX_FILES = int(os.getenv("MAX_FILES", "8"))
+MAX_MODEL_THREADS = int(os.getenv("MAX_MODEL_THREADS", "4"))
+HEAVY_MODEL_PASSPHRASE_HASH = os.getenv(
+    "HEAVY_MODEL_PASSPHRASE_HASH",
+    "change-me",
+)
 
 MODEL_LABELS = {
     "u2net": "u2net (general)",
@@ -46,10 +56,17 @@ MODEL_LABELS = {
     "u2net_human_seg": "u2net_human_seg (portraits)",
     "u2net_cloth_seg": "u2net_cloth_seg (clothing)",
     "isnet-anime": "isnet-anime (cartoon/anime)",
+    "isnet-general-use": "isnet-general-use (general)",
+    "birefnet-general-lite": "birefnet-general-lite (high quality)",
 }
-ALLOWED_MODELS = list(MODEL_LABELS.keys())
+HEAVY_MODEL_LABELS = {
+    "birefnet-general": "birefnet-general (ultra)",
+    "birefnet-portrait": "birefnet-portrait (ultra portraits)",
+    "bria-rmbg": "bria-rmbg (ultra)",
+}
+ALLOWED_MODELS = list(MODEL_LABELS.keys()) + list(HEAVY_MODEL_LABELS.keys())
+HEAVY_MODELS = set(HEAVY_MODEL_LABELS.keys())
 
-BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -58,6 +75,17 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 processing_lock = Lock()
 
 ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def configure_model_threads() -> None:
+    if MAX_MODEL_THREADS <= 0:
+        return
+    current = os.getenv("OMP_NUM_THREADS")
+    if not (current and current.isdigit()):
+        current = MAX_MODEL_THREADS
+    os.environ["OMP_NUM_THREADS"] = str(current)
+
+configure_model_threads()
 
 
 def get_request_host() -> str:
@@ -98,6 +126,18 @@ def resize_if_needed(image_bytes: bytes) -> bytes:
         return buf.getvalue()
 
 
+def passphrase_digest(passphrase: str) -> str:
+    normalized = unicodedata.normalize("NFC", passphrase)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def is_heavy_model_passphrase_valid(passphrase: str) -> bool:
+    return hmac.compare_digest(
+        passphrase_digest(passphrase),
+        HEAVY_MODEL_PASSPHRASE_HASH.lower(),
+    )
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     if FLASK_SECRET_KEY:
@@ -111,23 +151,18 @@ def create_app() -> Flask:
         MAX_DIM=MAX_DIM,
         MAX_FILES=MAX_FILES,
         MODEL_OPTIONS=MODEL_LABELS,
+        HEAVY_MODEL_OPTIONS=HEAVY_MODEL_LABELS,
+        HEAVY_MODEL_KEYS=list(HEAVY_MODEL_LABELS.keys()),
     )
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    app.config["REMBG_SESSIONS"] = {}
-
     def get_session(model: str):
-        sessions = app.config["REMBG_SESSIONS"]
-        if model in sessions:
-            return sessions[model]
         try:
-            session = new_session(model)
+            return new_session(model)
         except Exception as exc:
             app.logger.error("Failed to initialize model %s: %s", model, exc)
             return None
-        sessions[model] = session
-        return session
 
     @app.before_request
     def enforce_host_check() -> None:
@@ -158,10 +193,16 @@ def create_app() -> Flask:
             flash("Busy right now. Try again in a moment.")
             return render_template("index.html"), 503
 
+        session = None
         try:
             model = request.form.get("model", DEFAULT_MODEL)
             if model not in ALLOWED_MODELS:
                 model = DEFAULT_MODEL
+            if model in HEAVY_MODELS and not is_heavy_model_passphrase_valid(
+                request.form.get("heavy_model_passphrase", "")
+            ):
+                flash("That model needs the heavy-model passphrase.")
+                return render_template("index.html"), 403
             session = get_session(model)
             if session is None:
                 flash("Model failed to initialize. Check server logs.")
@@ -218,6 +259,8 @@ def create_app() -> Flask:
             flash("Background removal failed. Try a smaller image.")
             return render_template("index.html"), 500
         finally:
+            del session
+            gc.collect()
             processing_lock.release()
 
     @app.get("/view/<file_id>")

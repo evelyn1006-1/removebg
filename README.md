@@ -22,6 +22,12 @@ python -m flask --app app run
 
 Then open `http://127.0.0.1:5000`.
 
+## Configuration
+
+Heavy models require a passphrase. Set `HEAVY_MODEL_PASSPHRASE_HASH` to the
+SHA-256 hex digest of the passphrase if you want to change it without editing
+the app. Passphrases are normalized with Unicode NFC before hashing.
+
 ## Deploy
 
 The `deploy/` folder contains the systemd service and Nginx site config used for `removebg.princessevelyn.com`.

@@ -27,11 +27,26 @@
     <form class="card" method="post" enctype="multipart/form-data">
       <label class="field">
         <span>Model</span>
-        <select name="model">
+        <select name="model" id="modelSelect">
+          <optgroup label="Standard">
           {% for key, label in config.MODEL_OPTIONS.items() %}
             <option value="{{ key }}" {% if key == config.DEFAULT_MODEL %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
+          </optgroup>
+          <optgroup label="Heavy">
+          {% for key, label in config.HEAVY_MODEL_OPTIONS.items() %}
+            <option value="{{ key }}" {% if key == config.DEFAULT_MODEL %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+          </optgroup>
         </select>
+      </label>
+
+      <label class="field passphrase-field" id="heavyPassphraseField" hidden>
+        <span>Heavy model passphrase</span>
+        <span class="passphrase-control">
+          <input id="heavyPassphraseInput" type="password" name="heavy_model_passphrase" autocomplete="off">
+          <button class="small-button" id="togglePassphraseButton" type="button">Show</button>
+        </span>
       </label>
 
       <div class="dropzone" id="dropzone">
@@ -58,6 +73,11 @@
     const input = document.getElementById("fileInput");
     const dropzone = document.getElementById("dropzone");
     const fileList = document.getElementById("fileList");
+    const modelSelect = document.getElementById("modelSelect");
+    const heavyPassphraseField = document.getElementById("heavyPassphraseField");
+    const heavyPassphraseInput = document.getElementById("heavyPassphraseInput");
+    const togglePassphraseButton = document.getElementById("togglePassphraseButton");
+    const heavyModels = new Set({{ config.HEAVY_MODEL_KEYS | tojson }});
 
     function renderFileList(files) {
       if (!files || files.length === 0) {
@@ -73,6 +93,25 @@
     input.addEventListener("change", (event) => {
       renderFileList(event.target.files);
     });
+
+    function updateHeavyPassphraseField() {
+      const isHeavy = heavyModels.has(modelSelect.value);
+      heavyPassphraseField.hidden = !isHeavy;
+      heavyPassphraseInput.required = isHeavy;
+      if (!isHeavy) {
+        heavyPassphraseInput.value = "";
+        heavyPassphraseInput.type = "password";
+        togglePassphraseButton.textContent = "Show";
+      }
+    }
+
+    modelSelect.addEventListener("change", updateHeavyPassphraseField);
+    togglePassphraseButton.addEventListener("click", () => {
+      const isHidden = heavyPassphraseInput.type === "password";
+      heavyPassphraseInput.type = isHidden ? "text" : "password";
+      togglePassphraseButton.textContent = isHidden ? "Hide" : "Show";
+    });
+    updateHeavyPassphraseField();
 
     dropzone.addEventListener("dragover", (event) => {
       event.preventDefault();

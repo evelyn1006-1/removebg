@@ -55,12 +55,17 @@ body {
   font-weight: 600;
 }
 
-.field select {
+.field select,
+.field input {
   padding: 0.6rem 0.75rem;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: #fff7fb;
   font-size: 1rem;
+}
+
+.passphrase-field[hidden] {
+  display: none;
 }
 
 .dropzone {
@@ -114,6 +119,17 @@ button,
   text-decoration: none;
   display: inline-block;
   text-align: center;
+}
+
+.passphrase-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.small-button {
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
 }
 
 .button.ghost {

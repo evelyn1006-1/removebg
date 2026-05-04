@@ -24,7 +24,7 @@
       {% endif %}
     {% endwith %}
 
-    <form class="card" method="post" enctype="multipart/form-data">
+    <form class="card" id="uploadForm" method="post" enctype="multipart/form-data">
       <label class="field">
         <span>Model</span>
         <select name="model" id="modelSelect">
@@ -57,7 +57,16 @@
 
       <div class="file-list" id="fileList" aria-live="polite"></div>
 
-      <button type="submit">Remove background</button>
+      <button id="submitButton" type="submit">Remove background</button>
+
+      <div class="loading-panel" id="loadingPanel" hidden aria-live="polite">
+        <p class="loading-title">Removing background…</p>
+        <p class="subtle">Heavy models can take a while. Please keep this tab open.</p>
+        <div class="loading-bar" role="progressbar" aria-label="Background removal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="loading-bar-fill" id="loadingBarFill"></div>
+        </div>
+        <p class="loading-percent" id="loadingPercent">0%</p>
+      </div>
     </form>
 
     <div class="tips">
@@ -78,6 +87,11 @@
     const heavyPassphraseInput = document.getElementById("heavyPassphraseInput");
     const togglePassphraseButton = document.getElementById("togglePassphraseButton");
     const heavyModels = new Set({{ config.HEAVY_MODEL_KEYS | tojson }});
+    const uploadForm = document.getElementById("uploadForm");
+    const submitButton = document.getElementById("submitButton");
+    const loadingPanel = document.getElementById("loadingPanel");
+    const loadingBarFill = document.getElementById("loadingBarFill");
+    const loadingPercent = document.getElementById("loadingPercent");
 
     function renderFileList(files) {
       if (!files || files.length === 0) {
@@ -127,6 +141,27 @@
       dropzone.classList.remove("is-dragover");
       input.files = event.dataTransfer.files;
       renderFileList(input.files);
+    });
+
+    uploadForm.addEventListener("submit", () => {
+      submitButton.disabled = true;
+      submitButton.textContent = "Processing…";
+      loadingPanel.hidden = false;
+
+      let progress = 3;
+      loadingBarFill.style.width = `${progress}%`;
+      loadingPercent.textContent = `${progress}%`;
+
+      const timer = setInterval(() => {
+        if (progress >= 95) {
+          clearInterval(timer);
+          return;
+        }
+        const step = progress < 50 ? 5 : (progress < 80 ? 3 : 1);
+        progress = Math.min(95, progress + step);
+        loadingBarFill.style.width = `${progress}%`;
+        loadingPercent.textContent = `${progress}%`;
+      }, 450);
     });
   </script>
 </body>

@@ -24,7 +24,7 @@
       {% endif %}
     {% endwith %}
 
-    <form class="card" method="post" enctype="multipart/form-data">
+    <form class="card" id="removeForm" method="post" enctype="multipart/form-data">
       <label class="field">
         <span>Model</span>
         <select name="model" id="modelSelect">
@@ -57,8 +57,20 @@
 
       <div class="file-list" id="fileList" aria-live="polite"></div>
 
-      <button type="submit">Remove background</button>
+      <button id="submitButton" type="submit">Remove background</button>
     </form>
+
+    <div class="progress-modal" id="progressModal" role="dialog" aria-modal="true" aria-labelledby="progressTitle" hidden>
+      <div class="progress-panel">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="progress-copy">
+          <h2 id="progressTitle">Removing background...</h2>
+          <p id="progressMessage">Preparing your image.</p>
+          <p class="subtle" id="elapsedTime" aria-live="polite">Elapsed: 0s</p>
+        </div>
+        <div class="progress-bar" aria-hidden="true"><span></span></div>
+      </div>
+    </div>
 
     <div class="tips">
       <h2>Tips</h2>
@@ -73,11 +85,17 @@
     const input = document.getElementById("fileInput");
     const dropzone = document.getElementById("dropzone");
     const fileList = document.getElementById("fileList");
+    const form = document.getElementById("removeForm");
+    const submitButton = document.getElementById("submitButton");
+    const progressModal = document.getElementById("progressModal");
+    const progressMessage = document.getElementById("progressMessage");
+    const elapsedTime = document.getElementById("elapsedTime");
     const modelSelect = document.getElementById("modelSelect");
     const heavyPassphraseField = document.getElementById("heavyPassphraseField");
     const heavyPassphraseInput = document.getElementById("heavyPassphraseInput");
     const togglePassphraseButton = document.getElementById("togglePassphraseButton");
     const heavyModels = new Set({{ config.HEAVY_MODEL_KEYS | tojson }});
+    let progressTimer = null;
 
     function renderFileList(files) {
       if (!files || files.length === 0) {
@@ -92,6 +110,65 @@
 
     input.addEventListener("change", (event) => {
       renderFileList(event.target.files);
+    });
+
+    function setProcessingState(isProcessing) {
+      document.body.classList.toggle("is-processing", isProcessing);
+      progressModal.hidden = !isProcessing;
+      submitButton.disabled = isProcessing;
+      form.setAttribute("aria-busy", isProcessing ? "true" : "false");
+      if (!isProcessing && progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
+    }
+
+    function showProgressModal() {
+      const fileCount = input.files ? input.files.length : 0;
+      const selectedModel = modelSelect.options[modelSelect.selectedIndex]?.text || modelSelect.value;
+      const plural = fileCount === 1 ? "image" : "images";
+      const startedAt = Date.now();
+
+      progressMessage.textContent = fileCount > 0
+        ? `Processing ${fileCount} ${plural} with ${selectedModel}.`
+        : "Processing your upload.";
+      elapsedTime.textContent = "Elapsed: 0s";
+      setProcessingState(true);
+
+      progressTimer = setInterval(() => {
+        const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        elapsedTime.textContent = `Elapsed: ${seconds}s`;
+      }, 1000);
+    }
+
+    async function submitWithProgress() {
+      const response = await fetch(form.action || window.location.href, {
+        method: form.method || "POST",
+        body: new FormData(form),
+      });
+
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return;
+      }
+
+      const html = await response.text();
+      document.open();
+      document.write(html);
+      document.close();
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      showProgressModal();
+      submitWithProgress().catch(() => {
+        setProcessingState(false);
+        progressMessage.textContent = "Something went wrong while uploading. Please try again.";
+      });
+    });
+
+    window.addEventListener("pageshow", () => {
+      setProcessingState(false);
     });
 
     function updateHeavyPassphraseField() {
